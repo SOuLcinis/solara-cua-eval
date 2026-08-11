@@ -1,0 +1,106 @@
+# solara-cua-eval
+
+An evaluation harness for computer-use agents that **separates harness faults from model failures**.
+
+## The claim
+
+Computer-use benchmarks report a success rate. When a task fails, the failure is
+attributed to the model.
+
+But a harness that silently drops an action produces the *same observable* — task
+not completed — while the model reasoned correctly the whole time. Unless every
+action is classified, those two are indistinguishable, and harness bugs get
+charged to model reasoning.
+
+This is not hypothetical. It was found by auditing a working computer-use agent
+and discovering five ways it reported success while doing nothing or the wrong
+thing. See [`docs/FINDINGS.md`](docs/FINDINGS.md).
+
+## The part that should worry you
+
+Run `python scripts/demo_offline.py`. Two executors, the same four scripted
+tasks, scored identically:
+
+```
+legacy-executor    naive success 0.0%    contaminated 0    (4/4 "fail_model")
+fixed-executor     naive success 50.0%   contaminated 1    attributable 66.7%
+```
+
+The buggy harness scores **0%** and flags **nothing**. All four failures come
+back as clean, confident `fail_model` verdicts. Three of them were harness bugs.
+
+That is the actual danger. A silently-failing harness doesn't merely lose
+accuracy — it loses the ability to know it is wrong, and it produces a tidy
+result set that reads as a model capability finding.
+
+## The taxonomy
+
+Three tiers, because honest attribution matters more than a clean number:
+
+| Tier | Verdict | Meaning |
+|---|---|---|
+| Definite harness fault | `contaminated` | The executor provably didn't do what was asked. The run says nothing about the model. |
+| Ambiguous | `ambiguous` | The driver raised. Could be either side. Reported separately, never silently assigned. |
+| Model-attributable | `fail_model` / `pass` | The harness did everything asked. Only these support claims about the model. |
+
+Plus `turn_limit` (budget, not capability) and `refused` (stopped at a human
+safety gate).
+
+Two rules the tests lock down:
+
+- **A harness fault contaminates a run even if the task passed.** If an action
+  was dropped, the pass can't be trusted either.
+- **A slow page is not a failed action.** Settle timeouts are recorded but never
+  counted as faults; conflating them inflates the fault rate.
+
+## Status — read this before believing any number
+
+- ✅ Executor, taxonomy, instrumentation, scoring, reporting — **50 tests passing**
+- ✅ Five real bugs found, each confirmed by executing the original code
+- ✅ Offline demo runs with no API key and no browser
+- ⚠️ **No live model runs yet.** Every number in this README comes from scripted
+  traces through a recording fake page. There is no empirical claim here about
+  any model's computer-use ability, and `demo.jsonl` contains zero model output.
+- ⬜ Cross-model suite against live backends — the actual research, not yet run
+
+## Layout
+
+```
+solara_cua/
+  executor.py          action dispatch; imports no browser library, duck-types `page`
+  fakes.py             FakePage / BrokenPage — recording stand-ins
+  eval/
+    taxonomy.py        outcomes, verdicts, and the attribution rules
+    record.py          ActionRecord / RunRecord, JSONL persistence
+    instrument.py      execute an action, return a classified record
+    report.py          naive vs attributable success rate
+scripts/
+  demo_offline.py      deterministic demonstration, no credentials needed
+tests/                 50 tests
+results/               JSONL run records (gitignored except .gitkeep)
+```
+
+## Design notes
+
+**`executor.py` imports no browser library.** `page` is duck-typed, so the same
+code runs against Playwright or a recording fake. That is what makes dispatch
+testable without a browser — and it is why the bugs were findable at all.
+
+**Verdicts are derived, never stored.** Rescoring old results under a changed
+taxonomy is a one-line change, not a re-run.
+
+**Results are JSONL, not prose.** Three previous builds of this system left
+nothing behind because they logged narrative to a notes file. Prose doesn't
+survive a rebuild. A results file with numbers in it does.
+
+## Running
+
+```bash
+python -m pytest -q          # 50 tests, no credentials required
+python scripts/demo_offline.py
+```
+
+## Provenance
+
+Extracted from a working voice-driven computer-use agent in the Solara hive,
+which continues to import `solara_cua.executor` in production.
