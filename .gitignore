@@ -19,5 +19,11 @@ results/*.jsonl
 results/*.json
 !results/.gitkeep
 
-# Browser profiles carry live logged-in sessions
+# Browser profiles carry live logged-in sessions. The eval suite must never
+# use the production profile — it launches fresh ephemeral ones instead.
 .browser_profile/
+.eval_profile*/
+
+# Screenshots and page captures from live runs. Sent to model APIs because the
+# task requires it, but never committed.
+artifacts/
