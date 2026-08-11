@@ -1,0 +1,23 @@
+# Secrets — never commit. The hive keeps API keys in ~/.env.solara and
+# ~/solara_live/.env; nothing in this repo should ever read or copy them.
+.env
+.env.*
+*.key
+*.pem
+secrets.*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Run artifacts
+results/*.jsonl
+results/*.json
+!results/.gitkeep
+
+# Browser profiles carry live logged-in sessions
+.browser_profile/
