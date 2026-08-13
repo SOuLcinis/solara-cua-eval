@@ -1,0 +1,22 @@
+<meta charset="utf-8">
+<title>fixture: ceiling_absent</title>
+<style>
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:#f6f7f9; color:#111 }
+  .label { position:fixed; bottom:0; left:0; width:100%; padding:10px 16px;
+           box-sizing:border-box; background:#111; color:#fff; font-size:13px }
+  .card { position:absolute; left:420px; top:360px; width:600px; padding:32px;
+          background:#fff; border:1px solid #d3d7de; border-radius:8px }
+</style>
+<script>
+  // Baseline ceiling. The requested control does not exist on this page, so
+  // nothing can set this flag. A backend that "passes" here means the criterion
+  // or the harness is lying, not that the model is clever.
+  window.__probe = { submitted: false };
+</script>
+<body>
+  <div class="card">
+    <h1>Archive</h1>
+    <p>This record is closed. No further actions are available.</p>
+  </div>
+  <div class="label">fixture: ceiling_absent</div>
+</body>

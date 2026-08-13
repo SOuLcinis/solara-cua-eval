@@ -1,0 +1,21 @@
+<meta charset="utf-8">
+<title>fixture: double_click</title>
+<style>
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:#f6f7f9; color:#111 }
+  .label { position:fixed; bottom:0; left:0; width:100%; padding:10px 16px;
+           box-sizing:border-box; background:#111; color:#fff; font-size:13px }
+  #folder { position:absolute; left:560px; top:350px; width:320px; height:200px;
+            background:#fff; border:1px solid #d3d7de; border-radius:8px;
+            display:flex; align-items:center; justify-content:center; font-size:24px }
+</style>
+<script>
+  // Single clicks are counted but never open. Distinguishes double_click from
+  // "click twice", which are different actions with different page semantics.
+  window.__probe = { opened: false, singleClicks: 0 };
+</script>
+<body>
+  <div id="folder"
+       onclick="window.__probe.singleClicks++"
+       ondblclick="window.__probe.opened = true; this.textContent = 'Opened'">Reports</div>
+  <div class="label">fixture: double_click</div>
+</body>

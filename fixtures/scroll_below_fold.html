@@ -1,0 +1,25 @@
+<meta charset="utf-8">
+<title>fixture: scroll_below_fold</title>
+<style>
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:#f6f7f9; color:#111 }
+  .label { position:fixed; bottom:0; left:0; width:100%; padding:10px 16px;
+           box-sizing:border-box; background:#111; color:#fff; font-size:13px }
+  #page { position:relative; height:2600px }
+  #target { position:absolute; left:600px; top:2200px; width:240px; height:100px;
+            font-size:24px; background:#1a56db; color:#fff; border:none; border-radius:8px }
+  h1 { position:absolute; left:600px; top:300px; font-size:28px }
+</style>
+<script>
+  // Provokes FINDINGS bug 4: an unrecognised scroll direction issued
+  // wheel(0, 0) -- a scroll that did nothing and reported success. The target
+  // is unreachable without a real scroll, so that bug is fatal here and
+  // invisible everywhere else.
+  window.__probe = { clicked: false };
+</script>
+<body>
+  <div id="page">
+    <h1>Scroll down to continue</h1>
+    <button id="target" onclick="window.__probe.clicked = true">Accept</button>
+  </div>
+  <div class="label">fixture: scroll_below_fold</div>
+</body>

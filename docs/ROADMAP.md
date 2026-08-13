@@ -141,12 +141,12 @@ If a task doesn't serve G1–G4, it waits.
 
 ## 5. Phases
 
-**Phase 1 — fixtures and tasks (offline, no API spend)**
-Build `fixtures/` static pages, one per interaction primitive plus one per
-known failure mode. Write `tasks.py`: each task is a fixture URL, a goal string
-for the model, and a mechanical criterion. Extend `demo_offline.py` into
-`run_suite.py`. Verify end-to-end against the fixed executor with a scripted
-trace before any model is involved. **Cost: zero.**
+**Phase 1 — fixtures and tasks (offline, no API spend)** — ✅ **done**
+14 fixture pages, 11 interaction primitives, 4 failure-mode pages (one per
+confirmed bug), 2 baselines. `tasks.py` holds goal, JS criterion, oracle trace
+and split for each. `run_suite.py` runs them against a localhost server in an
+ephemeral browser context. Oracle replay is green end to end and deterministic
+across repeats. **Cost: zero.**
 
 **Phase 2 — backend adapters**
 One interface, three implementations: Gemini (key already wired), the local
@@ -170,10 +170,19 @@ repo public.
 
 ## 6. Current state
 
-- ✅ Executor, taxonomy, instrumentation, scoring, reporting — 50 tests passing
+- ✅ Executor, taxonomy, instrumentation, scoring, reporting — 129 tests passing
 - ✅ Five bugs found and confirmed by executing the original code
 - ✅ Offline demo runs with no key and no browser
 - ✅ Private repo, SSH auth working, local and remote reconciled
-- ⬜ Phase 1 — not started, next
+- ✅ Phase 1 — fixtures, tasks, oracles, runner; suite green in a real browser
+- ⬜ Phase 2 — backend adapters, next
 - ⚠️ No live model runs. Every number so far is a demonstration of the scoring,
   not an empirical result about any model.
+
+**Where Phase 2 plugs in.** `eval/runner.py` defines `Backend` with one method
+that matters, `next_action(observation)`, and `ScriptedBackend` implements it by
+replaying oracles. A model adapter subclasses `Backend`, sets
+`needs_screenshot = True`, and translates that model's function-call format into
+the executor's action vocabulary. Nothing else in the run loop may change —
+turn limit, viewport, settle policy and criteria stay identical across backends,
+because per-model special-casing is what invalidates the comparison.

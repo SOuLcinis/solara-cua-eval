@@ -1,0 +1,20 @@
+<meta charset="utf-8">
+<title>fixture: navigate_target</title>
+<style>
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:#f6f7f9; color:#111 }
+  .label { position:fixed; bottom:0; left:0; width:100%; padding:10px 16px;
+           box-sizing:border-box; background:#111; color:#fff; font-size:13px }
+  .card { position:absolute; left:420px; top:340px; width:600px; padding:32px;
+          background:#fff; border:1px solid #d3d7de; border-radius:8px }
+</style>
+<script>
+  // Records the visit for the start page's criterion to find after go_back.
+  sessionStorage.setItem('visited', 'target');
+</script>
+<body>
+  <div class="card">
+    <h1>Details</h1>
+    <p>Record 4417. Status: archived.</p>
+  </div>
+  <div class="label">fixture: navigate_target</div>
+</body>

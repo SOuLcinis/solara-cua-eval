@@ -1,0 +1,35 @@
+<meta charset="utf-8">
+<title>fixture: hover_reveal</title>
+<style>
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:#f6f7f9; color:#111 }
+  .label { position:fixed; bottom:0; left:0; width:100%; padding:10px 16px;
+           box-sizing:border-box; background:#111; color:#fff; font-size:13px }
+  #wrap   { position:absolute; left:560px; top:260px; width:320px; height:240px }
+  #trigger { width:320px; height:100px; background:#fff; border:1px solid #d3d7de;
+             border-radius:8px; display:flex; align-items:center;
+             justify-content:center; font-size:22px }
+  #target { position:absolute; top:140px; width:320px; height:100px; font-size:22px;
+            background:#1a56db; color:#fff; border:none; border-radius:8px }
+</style>
+<script>
+  // Requires `move` as a real action with lasting effect, not a no-op before a
+  // click. The wrapper spans both elements so the pointer can travel from the
+  // trigger to the revealed control without the menu closing underneath it.
+  window.__probe = { revealed: false, clicked: false };
+</script>
+<body>
+  <div id="wrap">
+    <div id="trigger">Account</div>
+    <button id="target" style="display:none" onclick="window.__probe.clicked = true">Sign out</button>
+  </div>
+  <div class="label">fixture: hover_reveal</div>
+  <script>
+    const wrap = document.getElementById('wrap');
+    const target = document.getElementById('target');
+    wrap.addEventListener('mouseenter', () => {
+      target.style.display = 'block';
+      window.__probe.revealed = true;
+    });
+    wrap.addEventListener('mouseleave', () => { target.style.display = 'none' });
+  </script>
+</body>

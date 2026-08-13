@@ -1,0 +1,21 @@
+<meta charset="utf-8">
+<title>fixture: click_basic</title>
+<style>
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:#f6f7f9; color:#111 }
+  .label { position:fixed; bottom:0; left:0; width:100%; padding:10px 16px;
+           box-sizing:border-box; background:#111; color:#fff; font-size:13px }
+  button { position:absolute; top:400px; width:240px; height:100px; font-size:26px;
+           background:#fff; border:2px solid #6b7280; border-radius:8px; cursor:pointer }
+</style>
+<script>
+  // Tests target discrimination, not clicking. Four identical affordances; only
+  // the named one counts. A backend that clicks *something* still fails.
+  window.__probe = { clicked: null };
+</script>
+<body>
+  <button style="left:120px"  onclick="window.__probe.clicked='Alpha'">Alpha</button>
+  <button style="left:440px"  onclick="window.__probe.clicked='Bravo'">Bravo</button>
+  <button style="left:760px"  onclick="window.__probe.clicked='Charlie'">Charlie</button>
+  <button style="left:1080px" onclick="window.__probe.clicked='Delta'">Delta</button>
+  <div class="label">fixture: click_basic</div>
+</body>

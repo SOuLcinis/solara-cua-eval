@@ -1,0 +1,19 @@
+<meta charset="utf-8">
+<title>fixture: triple_click_select</title>
+<style>
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:#f6f7f9; color:#111 }
+  .label { position:fixed; bottom:0; left:0; width:100%; padding:10px 16px;
+           box-sizing:border-box; background:#111; color:#fff; font-size:13px }
+  #para { position:absolute; left:320px; top:390px; width:800px; margin:0;
+          font-size:24px; background:#fff; padding:20px; border-radius:8px }
+</style>
+<script>
+  // Provokes FINDINGS bug 1: triple_click matched the outer mouse-action guard
+  // but had no inner branch, so it performed no action and raised nothing.
+  // The criterion reads the live selection, so a double-click (one word) fails.
+  window.__probe = {};
+</script>
+<body>
+  <p id="para">The quick brown fox jumps over the lazy dog.</p>
+  <div class="label">fixture: triple_click_select</div>
+</body>

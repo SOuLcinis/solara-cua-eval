@@ -53,15 +53,47 @@ Two rules the tests lock down:
 - **A slow page is not a failed action.** Settle timeouts are recorded but never
   counted as faults; conflating them inflates the fault rate.
 
+## The suite
+
+14 tasks against static fixture pages served from localhost — never a real
+website. Real sites change without notice, so a benchmark built on them measures
+site churn as much as model ability. Fixtures also mean no accounts, no
+credentials, and no third-party content in any screenshot.
+
+The payoff is bigger than reproducibility: a fixture can be **engineered to
+provoke a specific failure mode**. Every confirmed bug in `FINDINGS.md` has a
+page built to catch it — a control that only answers to right-click, a paragraph
+that needs a triple-click, a decoy occupying the exact origin so a coordinate
+that falls back to `(0, 0)` cannot pass by accident.
+
+Two of the tasks are baselines, run every time and excluded from the reported
+rates: a floor every backend must pass, and a ceiling — a control that does not
+exist — that none may. If the floor fails or the ceiling passes, the run is
+declared unsound instead of reported.
+
+Every task also ships an **oracle**: the action trace a perfect model would emit.
+That makes the whole pipeline verifiable for zero API spend, and turns a harness
+regression into a loud failure rather than every backend quietly getting worse at
+once.
+
+```
+$ python scripts/run_suite.py
+suite v1  backend=scripted-oracle  tasks=14  repeat=1
+...
+baseline check passed (floor reached, ceiling held)
+naive success rate  100.0%    contaminated 0
+```
+
 ## Status — read this before believing any number
 
-- ✅ Executor, taxonomy, instrumentation, scoring, reporting — **50 tests passing**
+- ✅ Executor, taxonomy, instrumentation, scoring, reporting — **129 tests passing**
 - ✅ Five real bugs found, each confirmed by executing the original code
 - ✅ Offline demo runs with no API key and no browser
+- ✅ Fixture suite + oracle replay green end to end in a real browser
 - ⚠️ **No live model runs yet.** Every number in this README comes from scripted
-  traces through a recording fake page. There is no empirical claim here about
-  any model's computer-use ability, and `demo.jsonl` contains zero model output.
-- ⬜ Cross-model suite against live backends — the actual research, not yet run
+  traces. There is no empirical claim here about any model's computer-use
+  ability, and no results file contains model output.
+- ⬜ Cross-model backends against live models — the actual research, not yet run
 
 ## Layout
 
@@ -74,9 +106,15 @@ solara_cua/
     record.py          ActionRecord / RunRecord, JSONL persistence
     instrument.py      execute an action, return a classified record
     report.py          naive vs attributable success rate
+    tasks.py           the suite: goals, criteria, oracles, splits
+    runner.py          the run loop and the Backend interface
+    server.py          localhost fixture server, loopback only
+    browser.py         ephemeral contexts — never a persistent profile
+fixtures/              static pages, one per primitive and per failure mode
 scripts/
   demo_offline.py      deterministic demonstration, no credentials needed
-tests/                 50 tests
+  run_suite.py         run the suite; defaults to the oracle backend
+tests/                 129 tests
 results/               JSONL run records (gitignored except .gitkeep)
 ```
 
@@ -96,8 +134,16 @@ survive a rebuild. A results file with numbers in it does.
 ## Running
 
 ```bash
-python -m pytest -q          # 50 tests, no credentials required
-python scripts/demo_offline.py
+python -m pytest -q               # 129 tests, no credentials required
+python scripts/demo_offline.py    # scoring demonstration, no browser
+python scripts/run_suite.py       # full suite, oracle backend, zero API cost
+```
+
+The browser-backed test skips itself with a reason when Playwright is absent, so
+the suite stays runnable on a machine with nothing installed. For the real thing:
+
+```bash
+pip install playwright && playwright install chromium
 ```
 
 ## Provenance

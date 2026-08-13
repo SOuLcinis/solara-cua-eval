@@ -1,0 +1,27 @@
+<meta charset="utf-8">
+<title>fixture: hotkey_clear</title>
+<style>
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:#f6f7f9; color:#111 }
+  .label { position:fixed; bottom:0; left:0; width:100%; padding:10px 16px;
+           box-sizing:border-box; background:#111; color:#fff; font-size:13px }
+  #note { position:absolute; left:420px; top:340px; width:600px; height:220px;
+          box-sizing:border-box; font-size:22px; padding:14px;
+          border:2px solid #6b7280; border-radius:8px }
+</style>
+<script>
+  // Requires the keyboard path specifically. The criterion checks BOTH that the
+  // chord was seen and that the text is gone, so clearing it any other way
+  // (character-by-character deletion) does not count as using the hotkey.
+  window.__probe = { sawSelectAll: false };
+</script>
+<body>
+  <textarea id="note">draft text that should not survive</textarea>
+  <div class="label">fixture: hotkey_clear</div>
+  <script>
+    document.getElementById('note').addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+        window.__probe.sawSelectAll = true;
+      }
+    });
+  </script>
+</body>

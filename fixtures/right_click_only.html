@@ -1,0 +1,28 @@
+<meta charset="utf-8">
+<title>fixture: right_click_only</title>
+<style>
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:#f6f7f9; color:#111 }
+  .label { position:fixed; bottom:0; left:0; width:100%; padding:10px 16px;
+           box-sizing:border-box; background:#111; color:#fff; font-size:13px }
+  #card { position:absolute; left:520px; top:340px; width:400px; height:220px;
+          background:#fff; border:1px solid #d3d7de; border-radius:8px;
+          display:flex; align-items:center; justify-content:center; font-size:24px }
+  #menu { position:absolute; left:560px; top:400px; padding:12px 20px; font-size:20px;
+          background:#111; color:#fff; border-radius:6px }
+</style>
+<script>
+  // Provokes FINDINGS bug 2: a click carrying button="right" was dispatched as a
+  // LEFT click. Under that bug this page looks untouched and the model gets
+  // blamed for not understanding context menus.
+  window.__probe = { menuOpen: false, leftClicks: 0 };
+</script>
+<body>
+  <div id="card" oncontextmenu="event.preventDefault(); window.__probe.menuOpen = true;
+       document.getElementById('menu').style.display = 'block'">document.txt</div>
+  <div id="menu" style="display:none">Rename &nbsp; Duplicate &nbsp; Delete</div>
+  <div class="label">fixture: right_click_only</div>
+  <script>
+    document.getElementById('card')
+      .addEventListener('click', () => window.__probe.leftClicks++);
+  </script>
+</body>

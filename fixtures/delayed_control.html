@@ -1,0 +1,31 @@
+<meta charset="utf-8">
+<title>fixture: delayed_control</title>
+<style>
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:#f6f7f9; color:#111 }
+  .label { position:fixed; bottom:0; left:0; width:100%; padding:10px 16px;
+           box-sizing:border-box; background:#111; color:#fff; font-size:13px }
+  #target { position:absolute; left:560px; top:400px; width:320px; height:100px;
+            font-size:24px; background:#1a56db; color:#fff; border:none; border-radius:8px }
+  #spinner { position:absolute; left:560px; top:400px; width:320px; height:100px;
+             display:flex; align-items:center; justify-content:center; font-size:22px;
+             background:#fff; border:1px solid #d3d7de; border-radius:8px }
+</style>
+<script>
+  // The control does not exist for the first 2.5s. This separates "the model
+  // waited" from "the harness got lucky with its own settle delay", and it is
+  // the case where a settle timeout must NOT be scored as a harness fault --
+  // a slow page is not a failed click.
+  window.__probe = { clicked: false, appearedAt: null };
+</script>
+<body>
+  <div id="spinner">Loading…</div>
+  <button id="target" style="display:none" onclick="window.__probe.clicked = true">Confirm</button>
+  <div class="label">fixture: delayed_control</div>
+  <script>
+    setTimeout(() => {
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('target').style.display = 'block';
+      window.__probe.appearedAt = performance.now();
+    }, 2500);
+  </script>
+</body>

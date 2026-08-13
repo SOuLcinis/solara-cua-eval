@@ -1,0 +1,21 @@
+<meta charset="utf-8">
+<title>fixture: navigate_back</title>
+<style>
+  body { margin:0; font:16px/1.5 system-ui, sans-serif; background:#f6f7f9; color:#111 }
+  .label { position:fixed; bottom:0; left:0; width:100%; padding:10px 16px;
+           box-sizing:border-box; background:#111; color:#fff; font-size:13px }
+  #link { position:absolute; left:560px; top:400px; width:320px; height:100px;
+          font-size:24px; background:#1a56db; color:#fff; border-radius:8px;
+          display:flex; align-items:center; justify-content:center; text-decoration:none }
+</style>
+<script>
+  // History navigation. The evidence lives in sessionStorage because it has to
+  // survive two page loads -- window.__probe does not. The criterion checks BOTH
+  // that the second page was reached and that we came back, so neither half
+  // passes alone.
+  window.__probe = {};
+</script>
+<body>
+  <a id="link" href="navigate_target.html">Open details</a>
+  <div class="label">fixture: navigate_back (start)</div>
+</body>
