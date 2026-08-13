@@ -84,16 +84,50 @@ baseline check passed (floor reached, ceiling held)
 naive success rate  100.0%    contaminated 0
 ```
 
+## First real result
+
+One backend so far: a 4B vision model running locally on llama.cpp. No key, no
+cost, and no screenshot leaves the machine.
+
+```
+computer-use eval summary -- local-vlm     (12 scored tasks, 3 repeats)
+naive success rate         91.7%
+attributable success rate  91.7%
+contaminated runs          0
+model stopped on its own   6 of 36   (rest ran to the turn limit)
+```
+
+**The number before I fixed my own harness was 83.3%.** The 8.3-point difference
+was mine, charged to the model — see findings #6–#10 below.
+
+Two things the success rate cannot tell you, and the record does:
+
+- **It solves tasks it cannot tell it has solved.** 11 of 12 scored tasks
+  passed; the model recognised completion in **2** of them. On the remaining
+  ones it kept issuing actions until the turn limit. It *did* stop correctly on
+  the impossible task, every repeat — it is better at knowing it cannot proceed
+  than at knowing it is done.
+- **That flailing decides your score.** Under end-state scoring, a solved task
+  is graded on whatever the model happened to do on a turn it should never have
+  taken. One such task overwrote its own correct answer and was recorded as a
+  capability failure.
+
+Honest limits: one backend, one harness, fixture pages rather than production
+software, and the three repeats above are correlated — see the note on sampling
+in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
 ## Status — read this before believing any number
 
-- ✅ Executor, taxonomy, instrumentation, scoring, reporting — **129 tests passing**
-- ✅ Five real bugs found, each confirmed by executing the original code
-- ✅ Offline demo runs with no API key and no browser
+- ✅ Executor, taxonomy, instrumentation, scoring, reporting — **162 tests passing**
+- ✅ Five real bugs found in a working agent, each confirmed by executing it
 - ✅ Fixture suite + oracle replay green end to end in a real browser
-- ⚠️ **No live model runs yet.** Every number in this README comes from scripted
-  traces. There is no empirical claim here about any model's computer-use
-  ability, and no results file contains model output.
-- ⬜ Cross-model backends against live models — the actual research, not yet run
+- ✅ **Five more faults found in this harness**, by running a real model against
+  it and reading the traces — findings #6–#10
+- ✅ One live backend: a local vision model, 12 scored tasks
+- ⬜ **A second backend.** Everything above is one model against one harness, so
+  nothing here is yet a *cross-model* claim. The adapter interface is done and a
+  second implementation is a small file; it is waiting on API budget, not on
+  code.
 
 ## Layout
 

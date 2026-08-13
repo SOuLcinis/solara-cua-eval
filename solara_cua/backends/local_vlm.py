@@ -11,7 +11,16 @@ Measured against Huihui-Qwen3.5-4B (Q4_K_M, mmproj) on a local llama-server:
     caption as a button.
   * Grounding is usable. Asked to click Charlie it emitted (600, 480) against a
     true centre of (611, 500) -- comfortably inside the target.
-  * It is deterministic at temperature 0: byte-identical replies across repeats.
+  * Determinism is real but narrower than it looks, and the difference matters
+    for how results are read:
+      - identical prompt, temperature 0, same process -> byte-identical reply;
+      - three suite repeats in one process -> identical outcomes AND identical
+        solve turns on all 14 tasks;
+      - the same task across separately launched runs -> a DIFFERENT action
+        sequence.
+    So `--repeat N` within one invocation does not sample variance; it re-reads
+    the same trajectory against a warm server. Treat those repeats as one
+    observation, not N, and get real spread from separate invocations.
   * It ALWAYS reasons first. `enable_thinking: false` and a `/no_think` suffix
     both still produced `reasoning_content`, so the token budget must cover the
     reasoning or the answer never arrives -- see MIN_SANE_MAX_TOKENS.

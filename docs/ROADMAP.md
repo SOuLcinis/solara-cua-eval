@@ -148,18 +148,44 @@ and split for each. `run_suite.py` runs them against a localhost server in an
 ephemeral browser context. Oracle replay is green end to end and deterministic
 across repeats. **Cost: zero.**
 
-**Phase 2 — backend adapters**
-One interface, three implementations: Gemini (key already wired), the local
-vision model on `:8080`, and Mistral (key on the `osint` box). The adapter
-converts model output into the executor's action vocabulary; everything
-downstream stays identical. Note: models emit different function-call formats,
-and normalising them is where bias creeps in — keep the mapping explicit and
-reviewable.
+**Phase 2 — backend adapters** — 🟡 **local done; paid backends deferred**
+One interface, several implementations. The adapter converts model output into
+the executor's action vocabulary; everything downstream stays identical. Models
+emit different function-call formats, and normalising them is where bias creeps
+in — so the prompt and the parser are *shared*, and an adapter may change only
+how a model is reached.
+
+- ✅ **Local vision model** (`--backend local`). Zero cost, no key, nothing
+  leaves the machine. Also `--backend local-free` for the same model without
+  constrained decoding, which isolates formatting from capability.
+- ⏸️ **Gemini / Mistral** — deferred. Not a technical blocker: the adapter
+  interface is done and a second implementation is a small file. Revisit when
+  paid API budget is available.
+
+Building this backend produced five harness faults, all of which would have been
+published as model results. They are written up as findings #6–#10 in
+`docs/FINDINGS.md` — the harness turning out to have the disease it was built to
+diagnose is the strongest evidence in the repo, not an embarrassment to bury.
 
 **Phase 3 — run and analyse**
 Baselines first. Then the full suite, ≥3 runs per task per backend. Produce
 per-backend summaries and the cross-model comparison. The interesting result:
 which failure modes are model-specific versus harness-wide.
+
+**Correction to practice #6, from the first real runs.** "Run each task ≥3
+times" is not sufficient, and following it literally here produced a number that
+looks far more robust than it is.
+
+Three repeats of the full suite in one invocation returned identical outcomes
+*and* identical solve turns on all 14 tasks — apparent perfect stability. But
+the same task run in a *separately launched* invocation produced a different
+action sequence. Repeats inside one process re-read one trajectory against a
+warm server; they are one observation reported three times, not three samples.
+
+A spread of zero is exactly what a correlated sample looks like, and it is
+indistinguishable from a genuinely robust result unless you know how the
+repeats were drawn. Real variance requires separate invocations, and any
+reported spread must say which kind it is.
 
 **Phase 4 — write up and publish**
 Short, honest, falsifiable. Lead with the finding, state the limitations
