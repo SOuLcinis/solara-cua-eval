@@ -50,6 +50,26 @@ def check_baselines(runs):
     return problems
 
 
+def build_backend(choice):
+    """Resolve a backend name. Fails loudly rather than falling back to a stub.
+
+    A backend that silently degrades to something cheaper would produce a full
+    results file attributed to a model that never ran -- the most expensive
+    silent failure available here.
+    """
+    if choice == "oracle":
+        return ScriptedBackend()
+
+    from solara_cua.backends.local_vlm import LocalVLMBackend, server_reachable
+
+    if not server_reachable():
+        sys.exit(
+            "No local vision server on http://127.0.0.1:8080.\n"
+            "Start llama-server with a multimodal model and an mmproj, then retry."
+        )
+    return LocalVLMBackend(constrained=(choice == "local"))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -60,7 +80,13 @@ def main():
     ap.add_argument("--task", default=None, help="run a single task by id")
     ap.add_argument("--max-turns", type=int, default=MAX_TURNS)
     ap.add_argument("--headed", action="store_true", help="show the browser")
-    ap.add_argument("--out", default=str(REPO / "results" / "oracle.jsonl"))
+    ap.add_argument("--backend", default="oracle",
+                    choices=("oracle", "local", "local-free"),
+                    help="oracle replays known-correct traces (free); "
+                         "local drives the on-device vision model; "
+                         "local-free is the same model without constrained decoding")
+    ap.add_argument("--out", default=None,
+                    help="results file (default: results/<backend>.jsonl)")
     ap.add_argument("--artifacts", action="store_true",
                     help="save per-turn screenshots to artifacts/ (gitignored)")
     args = ap.parse_args()
@@ -82,7 +108,7 @@ def main():
     if gaps:
         print(f"note: primitives with no task: {', '.join(gaps)}\n")
 
-    backend = ScriptedBackend()
+    backend = build_backend(args.backend)
     artifacts_dir = (REPO / "artifacts") if args.artifacts else None
 
     runs = []
@@ -109,10 +135,16 @@ def main():
         for p in problems:
             print(f"  {p}")
         print("\nResults below are NOT trustworthy.\n")
-    else:
+    elif any(task_module.BY_ID[r.task_id].kind in (KIND_FLOOR, KIND_CEILING)
+             for r in runs):
         print("baseline check passed (floor reached, ceiling held)\n")
+    else:
+        # Saying "passed" when nothing was checked is the same silent-success
+        # pattern this repo documents -- a confident all-clear from a check that
+        # never ran.
+        print("baseline check SKIPPED — no baseline task in this selection\n")
 
-    out = Path(args.out)
+    out = Path(args.out) if args.out else REPO / "results" / f"{backend.name}.jsonl"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("")  # a suite run replaces its own file rather than appending
     write_jsonl(runs, out)

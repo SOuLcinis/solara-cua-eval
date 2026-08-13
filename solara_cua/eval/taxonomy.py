@@ -47,6 +47,39 @@ class ActionOutcome(str, Enum):
     HARNESS_DRIVER_ERROR = "harness_driver_error"
     """The browser driver raised. Attribution is genuinely ambiguous."""
 
+    HARNESS_TOKEN_BUDGET = "harness_token_budget"
+    """The model's reply was cut off by max_tokens before it produced anything.
+
+    Found while building the first backend, which is the only reason it is here.
+    The local model reasons before answering, and with a max_tokens that looked
+    generous the entire budget went to reasoning -- leaving `content: ""` and
+    `finish_reason: "length"`. An empty reply is indistinguishable from a model
+    that had nothing to say, so a benchmark would score it as a model failure.
+
+    Filed AMBIGUOUS rather than as a definite harness fault, deliberately. Too
+    small a budget is the harness's fault; a model that reasons forever and never
+    answers is the model's. From one truncated response those are genuinely
+    indistinguishable, and claiming otherwise would be the same overconfidence
+    this taxonomy exists to prevent.
+    """
+
+    MODEL_UNPARSEABLE = "model_unparseable"
+    """The model replied, but nothing in it could be read as an action.
+
+    NOT a harness fault: the harness did its job and got something it could not
+    use. Tracked separately from a wrong action because they fail differently --
+    one is a formatting problem, the other a reasoning one, and a backend that
+    scores badly needs to know which.
+
+    Care is required here. The local model, asked the same question twice,
+    returned `{"action":"click","x":600,"y":480}` under constrained decoding and
+    `<click x="600" y="480"/>` without it. Identical grounding, different
+    serialization. A strict JSON parser would have logged the second as a
+    failure for a model that located the target perfectly -- so the parser is
+    deliberately tolerant, and this outcome means "unreadable by any reading",
+    not "not the format I wanted".
+    """
+
     REFUSED_BY_USER = "refused_by_user"
     """A human declined the action at a safety gate. Not a fault on either side."""
 
@@ -56,7 +89,10 @@ DEFINITE_HARNESS_FAULTS = frozenset({
     ActionOutcome.HARNESS_BAD_COORDINATE,
 })
 
-AMBIGUOUS_FAULTS = frozenset({ActionOutcome.HARNESS_DRIVER_ERROR})
+AMBIGUOUS_FAULTS = frozenset({
+    ActionOutcome.HARNESS_DRIVER_ERROR,
+    ActionOutcome.HARNESS_TOKEN_BUDGET,
+})
 
 ALL_FAULTS = DEFINITE_HARNESS_FAULTS | AMBIGUOUS_FAULTS
 

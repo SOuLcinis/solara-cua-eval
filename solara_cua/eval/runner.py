@@ -7,13 +7,31 @@ of special-casing is exactly what creeps in the moment one model underperforms.
 A backend may only choose *which action to request next*; nothing else about the
 run is negotiable.
 """
+from dataclasses import dataclass
+
 from solara_cua.eval.instrument import execute_recorded
 from solara_cua.eval.record import ActionRecord, RunRecord
 from solara_cua.eval.taxonomy import ActionOutcome
-from solara_cua.eval.tasks import VIEWPORT
+from solara_cua.eval.tasks import SUITE_VERSION, VIEWPORT
 from solara_cua.executor import settle
 
 MAX_TURNS = 12
+
+
+@dataclass
+class NonAction:
+    """A turn that produced no executable action, and why.
+
+    A backend has three possible answers, not two: an action, "I am finished",
+    or "something went wrong before there was an action". Collapsing the third
+    into either of the others is how attribution gets lost -- an unreachable
+    server and a model that emitted nonsense would both end up looking like a
+    model that simply failed the task.
+    """
+
+    outcome: ActionOutcome
+    detail: str
+    label: str = "__no_action__"
 
 
 class Backend:
@@ -77,6 +95,10 @@ def run_task(task, backend, page, base_url, max_turns=MAX_TURNS, artifacts_dir=N
 
     backend.reset(task)
     run = RunRecord(task_id=task.id, backend=backend.name)
+    # Harness parameters travel with the result. A run scored under a different
+    # turn budget is not comparable, and a results file that does not say which
+    # budget it used cannot be checked later.
+    run.notes = f"suite_v{SUITE_VERSION} max_turns={max_turns} viewport={width}x{height}"
     last_error = None
 
     for turn in range(1, max_turns + 1):
@@ -94,10 +116,22 @@ def run_task(task, backend, page, base_url, max_turns=MAX_TURNS, artifacts_dir=N
         if action is None:
             break
 
+        run.turns_used = turn
+
+        if isinstance(action, NonAction):
+            # Costs a turn and is recorded, but nothing touches the page. The
+            # model still sees why on the next turn.
+            record = run.add(ActionRecord(
+                action=action.label,
+                outcome=action.outcome,
+                detail=action.detail,
+            ))
+            last_error = action.detail
+            continue
+
         fname, args = action
         record = execute_recorded(fname, args, page, width, height)
         run.add(record)
-        run.turns_used = turn
         # The model is entitled to see its own errors and try again -- denying it
         # that feedback is precisely the silent-failure bug this repo documents.
         last_error = record.detail if record.is_fault else None
