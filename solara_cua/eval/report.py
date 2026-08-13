@@ -21,6 +21,18 @@ def _verdict(row):
     return row["verdict"] if isinstance(row, dict) else row.verdict.value
 
 
+def _field(row, name, default=None):
+    """Read a field from a dict row or a live record.
+
+    Defaults rather than raising, so a v1 results file -- written before these
+    fields existed -- still summarizes instead of crashing. The missing fields
+    read as zero, which is honest: those runs genuinely do not carry the signal.
+    """
+    if isinstance(row, dict):
+        return row.get(name, default)
+    return getattr(row, name, default)
+
+
 def summarize(rows):
     """Compute the metrics for a set of run dicts.
 
@@ -45,10 +57,21 @@ def summarize(rows):
             if a["outcome"] in {f.value for f in ALL_FAULTS}:
                 fault_kinds[a["outcome"]] += 1
 
+    # Two facts a success rate cannot carry. `regressed` counts runs that reached
+    # the goal and then left it -- a real failure, but a different one from never
+    # getting there. `self_terminated` counts runs the model ended itself rather
+    # than running out of turns: knowing you are finished is a separate ability
+    # from finishing, and an agent that never stops is a problem a pass rate
+    # cannot see.
+    regressed = sum(1 for r in rows if _field(r, "regressed"))
+    self_terminated = sum(1 for r in rows if _field(r, "self_terminated"))
+
     return {
         "runs": total,
         "verdicts": dict(verdicts),
         "passes": passes,
+        "regressed": regressed,
+        "self_terminated": self_terminated,
         "contaminated": contaminated,
         "ambiguous": ambiguous,
         "attributable_runs": attributable,
@@ -81,6 +104,11 @@ def format_summary(summary, backend=""):
     lines.append(f"contaminated runs          {summary['contaminated']}"
                  f"   ({_pct(summary['contamination_rate'])} of all runs)")
     lines.append(f"ambiguous runs             {summary['ambiguous']}")
+    lines.append("")
+    lines.append(f"reached goal then undid it {summary.get('regressed', 0)}"
+                 "   (counted as a pass; the goal state WAS reached)")
+    lines.append(f"model stopped on its own   {summary.get('self_terminated', 0)}"
+                 f" of {summary['runs']}   (rest ran to the turn limit)")
 
     if summary["contaminated"]:
         lines.append("")

@@ -19,7 +19,10 @@ from solara_cua.eval.taxonomy import (
     verdict_for,
 )
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+"""v2 adds satisfied_at_turn and stopped_by. v1 results scored the criterion only
+at the end of a run, which counted a solved task as a failure whenever the model
+kept acting and undid its own work -- so v1 and v2 numbers are not comparable."""
 
 
 @dataclass
@@ -57,6 +60,45 @@ class RunRecord:
     turns_used: int = 0
     notes: str = ""
 
+    satisfied_at_turn: int = None
+    """The turn on which the success criterion FIRST became true, if ever.
+
+    The criterion is checked after every action, not only at the end. Scoring
+    end-state alone was wrong in a way that looked exactly like model
+    incapability: the local model solved a text-entry task on turn 2, kept
+    acting because it had not recognised success, and had typed over its own
+    correct answer by turn 6. End-state scoring recorded that as a failure.
+    """
+
+    still_satisfied_at_end: bool = None
+    """Whether the goal state survived to the end of the episode.
+
+    Separate from `satisfied_at_turn` because "never achieved it" and "achieved
+    it then undid it" are different failures with different fixes, and a single
+    pass/fail bit cannot tell them apart.
+    """
+
+    stopped_by: str = ""
+    """Why the episode ended: model_done, turn_limit, or criterion_error.
+
+    The episode deliberately does NOT end when the task is solved. Stopping
+    there scores correctly but destroys the signal -- the model never gets the
+    chance to say it is finished, so every run ends by harness intervention and
+    "solved it" becomes indistinguishable from "solved it and knew it". Those
+    are different abilities, and letting the episode run is what makes the
+    difference observable.
+    """
+
+    @property
+    def regressed(self):
+        """Reached the goal state and then left it. Reported, never hidden."""
+        return bool(self.passed) and self.still_satisfied_at_end is False
+
+    @property
+    def self_terminated(self):
+        """The model declared itself finished, rather than running out of turns."""
+        return self.stopped_by == "model_done"
+
     def add(self, record):
         self.actions.append(record)
         return record
@@ -84,6 +126,11 @@ class RunRecord:
             "passed": self.passed,
             "turns_used": self.turns_used,
             "turn_limit_hit": self.turn_limit_hit,
+            "satisfied_at_turn": self.satisfied_at_turn,
+            "still_satisfied_at_end": self.still_satisfied_at_end,
+            "stopped_by": self.stopped_by,
+            "regressed": self.regressed,
+            "self_terminated": self.self_terminated,
             "verdict": self.verdict.value,
             "action_count": len(self.actions),
             "fault_count": len(self.faults),

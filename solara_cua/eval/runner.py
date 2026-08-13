@@ -114,6 +114,7 @@ def run_task(task, backend, page, base_url, max_turns=MAX_TURNS, artifacts_dir=N
 
         action = backend.next_action(observation)
         if action is None:
+            run.stopped_by = "model_done"
             break
 
         run.turns_used = turn
@@ -135,31 +136,61 @@ def run_task(task, backend, page, base_url, max_turns=MAX_TURNS, artifacts_dir=N
         # The model is entitled to see its own errors and try again -- denying it
         # that feedback is precisely the silent-failure bug this repo documents.
         last_error = record.detail if record.is_fault else None
+
+        # Checked after EVERY action. Scoring end-state alone made a solved task
+        # look like a failure: the model completed a text-entry task on turn 2,
+        # did not recognise it had succeeded, and had overwritten its own answer
+        # by turn 6.
+        #
+        # The episode is NOT cut short here. Ending it on success scores
+        # correctly but silently removes the model's opportunity to declare
+        # itself finished -- every run would then end by harness intervention,
+        # making "solved it" and "solved it and knew it" indistinguishable.
+        satisfied, error = _criterion(task, page)
+        if error:
+            run.add(error)
+            run.stopped_by = "criterion_error"
+            break
+        if satisfied:
+            run.passed = True
+            if run.satisfied_at_turn is None:
+                run.satisfied_at_turn = turn
+        run.still_satisfied_at_end = satisfied
     else:
         run.turn_limit_hit = True
+        run.stopped_by = run.stopped_by or "turn_limit"
 
-    run.passed = _evaluate_criterion(task, page, run)
+    if run.still_satisfied_at_end is None:
+        # No action ever ran -- a model that stopped immediately, or an empty
+        # oracle. The criterion still has to be evaluated once.
+        satisfied, error = _criterion(task, page)
+        if error:
+            run.add(error)
+        else:
+            run.passed = satisfied
+            run.still_satisfied_at_end = satisfied
+            if satisfied:
+                run.satisfied_at_turn = 0
     return run
 
 
-def _evaluate_criterion(task, page, run):
-    """Score the task from live page state.
+def _criterion(task, page):
+    """Evaluate the success criterion. Returns (satisfied, error_record_or_None).
 
-    A criterion that itself blows up is a harness problem, so it is recorded as a
-    driver error rather than silently scored as a model failure. Same principle
-    as everywhere else here: never let the measuring instrument charge its own
-    faults to the thing being measured.
+    A criterion that itself blows up is a harness problem, so it becomes a driver
+    error rather than a silent model failure. Same principle as everywhere else:
+    never let the measuring instrument charge its own faults to the thing being
+    measured.
     """
     try:
-        return bool(page.evaluate(task.criterion))
+        return bool(page.evaluate(task.criterion)), None
     except Exception as e:
-        run.add(ActionRecord(
+        return False, ActionRecord(
             action="__criterion__",
             args={"expression": task.criterion},
             outcome=ActionOutcome.HARNESS_DRIVER_ERROR,
             detail=f"criterion evaluation failed -- {type(e).__name__}: {e}",
-        ))
-        return False
+        )
 
 
 def _screenshot(page, task, turn, artifacts_dir):

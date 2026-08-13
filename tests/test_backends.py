@@ -202,13 +202,25 @@ class _FixedBackend:
 
 
 class _CriterionPage(FakePage):
-    """A fake page whose `evaluate` returns a fixed verdict."""
+    """A fake page whose `evaluate` returns a fixed verdict.
+
+    The runner also evaluates a storage-clearing snippet at the start of every
+    run, so criterion checks are identified by expression rather than by call
+    count -- a fake that counts every evaluate() is measuring the wrong thing.
+    """
+
+    SETUP = "sessionStorage.clear"
 
     def __init__(self, passed=False):
         super().__init__()
         self._passed = passed
 
-    def evaluate(self, _expression):
+    def evaluate(self, expression):
+        if self.SETUP in expression:
+            return None
+        return self._criterion()
+
+    def _criterion(self):
         return self._passed
 
     def wait_for_load_state(self, *_a, **_kw):
@@ -239,6 +251,72 @@ def test_token_budget_fault_makes_the_run_unattributable():
     backend = _FixedBackend([NonAction(ActionOutcome.HARNESS_TOKEN_BUDGET, "x")])
     run = run_task(BY_ID["click-named-button"], backend, page, "http://x", max_turns=4)
     assert run.verdict is RunVerdict.AMBIGUOUS
+
+
+class _SolveThenBreakPage(_CriterionPage):
+    """The criterion goes true after one action, then false again.
+
+    Models the real trace that exposed this bug: the local model completed a
+    text-entry task, did not recognise it had succeeded, and typed over its own
+    answer four turns later.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.checks = 0
+
+    def _criterion(self):
+        self.checks += 1
+        return self.checks == 1
+
+
+def test_a_solved_task_stays_a_pass_even_if_the_model_undoes_it():
+    """The bug this locks down: end-state scoring charged a solved task to the
+    model's capability because the model kept acting and destroyed its own work.
+    """
+    page = _SolveThenBreakPage()
+    backend = _FixedBackend([("click", {"x": 500, "y": 500})] * 3)
+    run = run_task(BY_ID["click-named-button"], backend, page, "http://x", max_turns=6)
+
+    assert run.passed is True
+    assert run.satisfied_at_turn == 1
+    assert run.still_satisfied_at_end is False
+    assert run.regressed is True
+
+
+def test_the_episode_is_not_cut_short_on_success():
+    """Stopping at success would score correctly and erase the signal: the model
+    would never get the chance to say it was finished."""
+    page = _SolveThenBreakPage()
+    backend = _FixedBackend([("click", {"x": 500, "y": 500})] * 3)
+    run = run_task(BY_ID["click-named-button"], backend, page, "http://x", max_turns=6)
+    assert len(run.actions) == 3, "episode ended early and lost the stopping signal"
+
+
+def test_a_clean_pass_is_not_marked_as_regressed():
+    page = _CriterionPage(passed=True)
+    backend = _FixedBackend([("click", {"x": 1, "y": 1})])
+    run = run_task(BY_ID["click-named-button"], backend, page, "http://x", max_turns=4)
+    assert run.passed is True
+    assert run.still_satisfied_at_end is True
+    assert run.regressed is False
+
+
+def test_stopped_by_records_a_model_that_declared_itself_finished():
+    """"Solved it" and "solved it and knew it" are different abilities."""
+    page = _CriterionPage(passed=False)
+    run = run_task(BY_ID["click-named-button"], _FixedBackend([]), page,
+                   "http://x", max_turns=4)
+    assert run.stopped_by == "model_done"
+    assert run.self_terminated is True
+
+
+def test_stopped_by_records_running_out_of_turns():
+    page = _CriterionPage(passed=False)
+    backend = _FixedBackend([("click", {"x": 1, "y": 1})] * 10)
+    run = run_task(BY_ID["click-named-button"], backend, page, "http://x", max_turns=3)
+    assert run.stopped_by == "turn_limit"
+    assert run.turn_limit_hit is True
 
 
 def test_non_action_error_is_fed_back_to_the_model():
