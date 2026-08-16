@@ -86,35 +86,48 @@ naive success rate  100.0%    contaminated 0
 
 ## First real result
 
-One backend so far: a 4B vision model running locally on llama.cpp. No key, no
-cost, and no screenshot leaves the machine.
+One model so far: a 4B vision model running locally on llama.cpp. No key, no
+cost, and no screenshot leaves the machine. Two conditions — with and without
+constrained JSON decoding — three independent invocations each.
 
 ```
-computer-use eval summary -- local-vlm     (12 scored tasks, 3 repeats)
-naive success rate         91.7%
-attributable success rate  91.7%
-contaminated runs          0
-model stopped on its own   6 of 36   (rest ran to the turn limit)
+                          constrained    unconstrained
+success rate                    91.7%            91.7%     (3/3 invocations each)
+actions performed cleanly    204 / 204        204 / 204
+malformed replies                    0                0
+contaminated runs                    0                0
+mean turn latency                12.9s            13.0s
 ```
 
-**The number before I fixed my own harness was 83.3%.** The 8.3-point difference
-was mine, charged to the model — see findings #6–#10 below.
+**Constrained decoding turns out to buy nothing** — which is only a trustworthy
+statement because of what it took to get there.
 
-Two things the success rate cannot tell you, and the record does:
+The first version of this experiment said the opposite, stably, across three
+invocations: unconstrained produced 15 malformed replies, exhausted the token
+budget through a whole run, and failed a baseline. The conclusion — *this model
+needs grammar constraints* — was reproducible and wrong. Nine of those malformed
+replies were the model copying a `-` placeholder out of a table in **my system
+prompt**.
 
-- **It solves tasks it cannot tell it has solved.** 11 of 12 scored tasks
-  passed; the model recognised completion in **2** of them. On the remaining
-  ones it kept issuing actions until the turn limit. It *did* stop correctly on
-  the impossible task, every repeat — it is better at knowing it cannot proceed
-  than at knowing it is done.
-- **That flailing decides your score.** Under end-state scoring, a solved task
-  is graded on whatever the model happened to do on a turn it should never have
-  taken. One such task overwrote its own correct answer and was recorded as a
-  capability failure.
+Note what that fault did *not* touch: the success rate was 91.7% throughout. It
+would have produced a false claim about what the model **needs**, and checking
+the headline number would never have caught it. Finding #11.
 
-Honest limits: one backend, one harness, fixture pages rather than production
-software, and the three repeats above are correlated — see the note on sampling
-in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+**Two more results the success rate cannot carry:**
+
+- **It solves tasks it cannot tell it has solved.** 11 of 12 scored tasks pass;
+  the model recognises completion in **2**. On the rest it acts until the turn
+  limit. It *does* stop correctly on the impossible task, every invocation — it
+  is better at knowing it cannot proceed than at knowing it is done.
+- **An earlier scoring bug cost 8.3 points**, all charged to the model, because
+  the criterion was evaluated only at the end of a run and the model kept acting
+  after succeeding — findings #6–#10.
+
+Honest limits: one model, one harness, fixture pages rather than production
+software, and 12 scored tasks is a small suite. The three invocations per
+condition are independent (separate processes) — repeats *within* one
+invocation are not, and are collapsed rather than counted; see
+[`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Status — read this before believing any number
 

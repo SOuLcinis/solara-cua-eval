@@ -246,3 +246,102 @@ the instrument and blames the subject.
 
 The only defence found here that actually worked was instrumenting every action
 and reading the traces.
+
+---
+
+# The one that would have been published
+
+The first three-invocation comparison of constrained vs unconstrained decoding
+returned a clean, stable, reproducible result:
+
+| | constrained | unconstrained |
+|---|---|---|
+| success rate | 91.7% (3/3 invocations) | 91.7% (3/3 invocations) |
+| malformed replies | **0 of 184** | **15 of 186** |
+| token-budget exhaustion | 0 | 6 turns, one whole run |
+| baseline violations | 0 | **1 — the floor task** |
+| runs that reached the goal then left it | 0 | 3 |
+
+The conclusion writes itself: *this model needs grammar constraints to be
+usable.* Stable across three independent invocations, with a mechanism —
+unconstrained, it rambles past the token budget and emits nothing.
+
+**All of it was caused by the prompt.**
+
+## 11. A placeholder in the prompt became model output
+
+The system prompt renders the action vocabulary as a table. Parameterless
+actions showed `-` in the params column:
+
+```
+go_back        -        return to the previous page
+```
+
+Nine of the malformed replies were `{"action": "go_back", "-"}`. The model
+copied the placeholder into its JSON, producing invalid output that the harness
+recorded as `MODEL_UNPARSEABLE` and charged to the model.
+
+Ten more were coordinates packed into one field, `{"action":"click","x":[500,828]}`.
+
+After replacing `-` with `(takes no parameters)` — and nothing else about the
+model, the decoding, or the tasks — the numbers are:
+
+| | constrained | unconstrained |
+|---|---|---|
+| actions performed cleanly | **204 of 204** | **204 of 204** |
+| malformed replies | 0 | 0 |
+| token-budget exhaustion | 0 | 0 |
+| baseline violations | 0 | 0 |
+| mean turn latency | 12.9s | 13.0s |
+| completion tokens | 25,980 | 25,971 |
+
+**Constrained decoding provides no measurable benefit.** Its entire apparent
+value was compensating for a defect in the prompt. Even the coordinate-packing
+malformation stopped once the table stopped modelling malformed content.
+
+Note what did *not* move: the success rate was 91.7% before and after, in both
+conditions. The harness fault never touched the headline number. It would have
+produced a false claim about **what the model needs**, which no amount of
+checking the success rate would have caught.
+
+The prompt is the one component deliberately shared across every backend, so
+that no model could be tuned for. That made it the highest-leverage place in the
+system to introduce a fault — and a cross-model run would have shown every model
+paying the same penalty, which reads as a robust finding about models rather
+than a bug in one file.
+
+## 12. The failure that recorded everything except the evidence
+
+Diagnosing #11 meant reverse-engineering from an error string, because a failed
+parse stored *why* it failed and not *what* failed. The most interesting
+failures were the least diagnosable ones. Unreadable replies now keep 400
+characters of the reply.
+
+## 13. The alarm fired and was filtered out
+
+`run_suite.py` prints a baseline violation and exits non-zero. Both happened.
+Neither was seen, because the six runs were piped through
+`grep -E "naive success|passes"` — a filter that selected for the result and
+discarded the warning that the result was invalid.
+
+The check was correct. The reporting of the check was correct. The **consumer**
+of the report threw it away, which is the same failure the whole repo is about,
+committed one layer further out. Coverage now includes the baseline line and
+the exit code of every run.
+
+---
+
+## The pattern, stated once
+
+Eight harness faults across this project. Every one of them:
+
+1. was introduced by something written to make the harness *better* — robust,
+   clean, strict, prompt, well-summarized;
+2. produced a plausible, stable, reproducible number;
+3. landed on the model's side of the ledger.
+
+Not one was found by reading code. Every one was found by reading traces.
+
+The direction is the part worth keeping. A measurement error in a benchmark is
+not a coin flip — it flatters the instrument and blames the subject, because the
+instrument is what decides which of the two gets examined.
