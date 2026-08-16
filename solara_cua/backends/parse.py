@@ -128,6 +128,8 @@ def _to_action(payload, form):
     args = {k: v for k, v in payload.items()
             if k not in ("action", "name", "tool") and v is not None}
 
+    form = _unpack_coord_pair(args) or form
+
     for key in _COORD_KEYS:
         if key in args:
             coerced = _to_int(args[key])
@@ -140,6 +142,36 @@ def _to_action(payload, form):
         args["keys"] = [k.strip() for k in re.split(r"[+,]", args["keys"]) if k.strip()]
 
     return ParseResult(action=(name, args), form=form)
+
+
+def _unpack_coord_pair(args):
+    """Repair `{"x": [500, 828]}` -- both coordinates packed into one field.
+
+    Observed 10 times in one unconstrained experiment. Same grounding as a
+    well-formed reply, different packing, so rejecting it charges a
+    serialization quirk to the model's capability.
+
+    Deliberately narrow. It fires only when the pair is unambiguous: exactly two
+    numbers, and no conflicting `y`. A model that sent `x: [a, b]` alongside a
+    different `y` might mean a bounding box, and guessing there would be the
+    harness inventing an intention.
+
+    Returns a form suffix when it repairs something, so the tolerance is counted
+    in every report rather than quietly improving a score. Any reader who
+    thinks this is too generous can subtract it.
+    """
+    x = args.get("x")
+    if not (isinstance(x, list) and len(x) == 2):
+        return None
+    if any(_to_int(v) is None for v in x):
+        return None
+
+    y = args.get("y")
+    if y is not None and y != x:
+        return None  # ambiguous -- leave it to fail loudly
+
+    args["x"], args["y"] = x[0], x[1]
+    return "coord_pair_repaired"
 
 
 def _to_int(value):

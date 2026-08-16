@@ -136,6 +136,14 @@ class LocalVLMBackend(Backend):
         parsed = parse_action(reply)
         self._meta["parse_form"] = parsed.form or "unreadable"
 
+        if not parsed.ok:
+            # Keep the reply that could not be read. Without it a parse failure
+            # is only an error string, and the most interesting failures become
+            # the least diagnosable -- one experiment recorded 19 of them and
+            # the cause (a "-" placeholder copied out of the prompt) had to be
+            # reverse-engineered from the error text.
+            self._meta["raw_reply"] = reply.strip()[:400]
+
         if parsed.done:
             return None
         if parsed.action is None:

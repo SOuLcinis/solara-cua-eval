@@ -79,6 +79,31 @@ def test_coordinates_are_coerced_from_strings_and_floats():
         "x": 600, "y": 480}
 
 
+def test_coordinates_packed_into_one_field_are_repaired_and_the_repair_is_visible():
+    """Observed 10x unconstrained: {"action":"click","x":[500,828]}.
+
+    Same grounding, different packing. Rejecting it charges a serialization
+    quirk to capability -- but the repair is reported as its own parse form so
+    it is counted, not quietly enjoyed.
+    """
+    r = parse_action('{"action":"click","x":[500,828]}')
+    assert r.action == ("click", {"x": 500, "y": 828})
+    assert r.form == "coord_pair_repaired"
+
+
+def test_a_packed_pair_with_a_conflicting_y_is_left_to_fail():
+    """x:[a,b] beside a different y might be a bounding box. Guessing there
+    would be the harness inventing an intention for the model."""
+    r = parse_action('{"action":"click","x":[500,828],"y":300}')
+    assert r.action is None
+    assert "not a number" in r.error
+
+
+def test_a_packed_pair_of_non_numbers_is_not_repaired():
+    r = parse_action('{"action":"click","x":["left","top"]}')
+    assert r.action is None
+
+
 def test_non_numeric_coordinate_is_reported_not_guessed():
     r = parse_action('{"action":"click","x":"middle","y":480}')
     assert r.action is None
@@ -102,6 +127,23 @@ def test_unreadable_replies_report_an_error(reply):
 def test_system_prompt_offers_every_vocabulary_action():
     for name, _params, _desc in ACTION_VOCABULARY:
         assert name in SYSTEM_PROMPT
+
+
+def test_no_vocabulary_row_uses_a_bare_placeholder_symbol():
+    """The params column once read "-" for parameterless actions, and the model
+    copied it: `{"action": "go_back", "-"}`. Invalid JSON, recorded as a model
+    formatting failure, caused by the prompt.
+    """
+    for name, params, _desc in ACTION_VOCABULARY:
+        assert params.strip() not in ("-", "--", "n/a", ""), (
+            f"{name}: placeholder {params!r} can be echoed back as content"
+        )
+
+
+def test_unreadable_reply_is_kept_for_diagnosis():
+    backend = _StubBackend("I shall click the thing, probably.")
+    backend.next_action(_obs())
+    assert "I shall click" in backend.turn_metadata()["raw_reply"]
 
 
 def test_system_prompt_states_the_coordinate_convention():

@@ -12,6 +12,9 @@ the reply is constrained, how the response is parsed back into an action. Those
 are properties of the API, not of the task.
 """
 
+NO_PARAMS = "(takes no parameters)"
+"""Spelled out rather than shown as a symbol. See _vocabulary_block."""
+
 # The executor's vocabulary, restated for the model. Kept deliberately small:
 # every verb here is one the executor implements, so an unimplemented action is
 # a model error rather than a gap in the harness.
@@ -27,13 +30,23 @@ ACTION_VOCABULARY = (
     ("scroll", "x, y, direction, magnitude_in_pixels",
      "direction is up, down, left or right"),
     ("drag_and_drop", "start_x, start_y, end_x, end_y", "press, drag, release"),
-    ("go_back", "-", "return to the previous page"),
+    ("go_back", NO_PARAMS, "return to the previous page"),
     ("wait", "seconds", "let the page finish loading"),
-    ("done", "-", "the task is complete, or cannot be done"),
+    ("done", NO_PARAMS, "the task is complete, or cannot be done"),
 )
 
 
 def _vocabulary_block():
+    """Render the table the model sees.
+
+    The parameterless rows once showed "-" in the params column. The model
+    copied it: 9 of 19 malformed replies in one experiment were
+    `{"action": "go_back", "-"}` -- invalid JSON, recorded as MODEL_UNPARSEABLE,
+    and charged to the model. The prompt caused it.
+
+    Any placeholder that could be mistaken for content will eventually be echoed
+    as content, so parameterless actions now say so in words.
+    """
     return "\n".join(
         f"  {name:<14} {params:<38} {desc}" for name, params, desc in ACTION_VOCABULARY
     )
