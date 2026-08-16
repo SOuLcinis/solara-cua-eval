@@ -66,12 +66,29 @@ def summarize(rows):
     regressed = sum(1 for r in rows if _field(r, "regressed"))
     self_terminated = sum(1 for r in rows if _field(r, "self_terminated"))
 
+    parse_forms = Counter()
+    latencies = []
+    tokens = 0
+    for r in rows:
+        for a in (r.get("actions", []) if isinstance(r, dict) else []):
+            meta = a.get("meta") or {}
+            if meta.get("parse_form"):
+                parse_forms[meta["parse_form"]] += 1
+            if meta.get("latency_s") is not None:
+                latencies.append(meta["latency_s"])
+            tokens += meta.get("completion_tokens") or 0
+
     return {
         "runs": total,
         "verdicts": dict(verdicts),
         "passes": passes,
         "regressed": regressed,
         "self_terminated": self_terminated,
+        "parse_forms": dict(parse_forms),
+        "turns_timed": len(latencies),
+        "mean_turn_latency_s": (sum(latencies) / len(latencies)) if latencies else None,
+        "total_turn_seconds": round(sum(latencies), 1) if latencies else None,
+        "completion_tokens": tokens or None,
         "contaminated": contaminated,
         "ambiguous": ambiguous,
         "attributable_runs": attributable,
@@ -115,6 +132,20 @@ def format_summary(summary, backend=""):
         lines.append(f"  {summary['misattributed_failures']} run(s) would be scored as MODEL")
         lines.append("  failures by a plain success-rate benchmark. The harness")
         lines.append("  never performed the requested action.")
+
+    if summary.get("mean_turn_latency_s") is not None:
+        lines.append("")
+        lines.append(f"mean turn latency          {summary['mean_turn_latency_s']:.1f}s"
+                     f"   ({summary['turns_timed']} turns, "
+                     f"{summary['total_turn_seconds']}s total)")
+
+    if summary.get("parse_forms"):
+        lines.append("")
+        lines.append("reply formats the parser had to accept")
+        for form, n in sorted(summary["parse_forms"].items(), key=lambda kv: -kv[1]):
+            note = "  <- strict JSON would reject these" if form in (
+                "xml_tag", "embedded_json", "fenced_json") else ""
+            lines.append(f"  {form:<28} {n}{note}")
 
     if summary["fault_kinds"]:
         lines.append("")

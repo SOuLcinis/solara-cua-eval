@@ -12,7 +12,7 @@ from solara_cua.backends.local_vlm import (
 )
 from solara_cua.backends.parse import parse_action
 from solara_cua.backends.prompt import ACTION_VOCABULARY, SYSTEM_PROMPT, user_prompt
-from solara_cua.eval.runner import NonAction, run_task
+from solara_cua.eval.runner import Backend, NonAction, run_task
 from solara_cua.eval.taxonomy import ActionOutcome, RunVerdict
 from solara_cua.eval.tasks import BY_ID
 from solara_cua.fakes import FakePage
@@ -185,17 +185,17 @@ def test_constrained_flag_shows_up_in_the_backend_name():
 
 # -------------------------------------------------------------- runner wiring
 
-class _FixedBackend:
-    """Emits a scripted sequence of whatever it is given, then stops."""
+class _FixedBackend(Backend):
+    """Emits a scripted sequence of whatever it is given, then stops.
+
+    Subclasses Backend rather than duck-typing it, so a stub cannot drift out of
+    the interface it stands in for and pass tests a real backend would fail.
+    """
 
     name = "stub"
-    needs_screenshot = False
 
     def __init__(self, items):
         self._items = list(items)
-
-    def reset(self, task):
-        pass
 
     def next_action(self, observation):
         return self._items.pop(0) if self._items else None
@@ -317,6 +317,51 @@ def test_stopped_by_records_running_out_of_turns():
     run = run_task(BY_ID["click-named-button"], backend, page, "http://x", max_turns=3)
     assert run.stopped_by == "turn_limit"
     assert run.turn_limit_hit is True
+
+
+def test_turn_metadata_lands_on_the_action_record():
+    """Latency and parse form have to survive to the results file, or the
+    constrained/unconstrained comparison has nothing to compare."""
+
+    class _MetaBackend(_FixedBackend):
+        def turn_metadata(self):
+            return {"parse_form": "xml_tag", "latency_s": 12.5,
+                    "completion_tokens": 200}
+
+    page = _CriterionPage(passed=False)
+    backend = _MetaBackend([("click", {"x": 1, "y": 1})])
+    run = run_task(BY_ID["click-named-button"], backend, page, "http://x", max_turns=2)
+
+    assert run.actions[0].meta["parse_form"] == "xml_tag"
+    assert run.actions[0].to_dict()["meta"]["latency_s"] == 12.5
+
+
+def test_summary_reports_parse_forms_and_latency():
+    from solara_cua.eval.report import format_summary, summarize
+
+    rows = [{
+        "backend": "local-vlm-free", "verdict": "pass", "actions": [
+            {"outcome": "ok", "meta": {"parse_form": "xml_tag", "latency_s": 10.0,
+                                       "completion_tokens": 100}},
+            {"outcome": "ok", "meta": {"parse_form": "json", "latency_s": 20.0,
+                                       "completion_tokens": 100}},
+        ],
+    }]
+    summary = summarize(rows)
+    assert summary["parse_forms"] == {"xml_tag": 1, "json": 1}
+    assert summary["mean_turn_latency_s"] == 15.0
+    assert summary["completion_tokens"] == 200
+    assert "strict JSON would reject these" in format_summary(summary)
+
+
+def test_summary_survives_results_without_metadata():
+    """v1 and oracle results carry no meta. They must summarize, not crash."""
+    from solara_cua.eval.report import summarize
+
+    summary = summarize([{"backend": "oracle", "verdict": "pass",
+                          "actions": [{"outcome": "ok"}]}])
+    assert summary["parse_forms"] == {}
+    assert summary["mean_turn_latency_s"] is None
 
 
 def test_non_action_error_is_fed_back_to_the_model():

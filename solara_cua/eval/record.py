@@ -38,6 +38,13 @@ class ActionRecord:
     executor.settle -- but worth keeping, because a run full of unsettled pages
     is a run whose screenshots may have been captured mid-load."""
 
+    meta: dict = field(default_factory=dict)
+    """Per-turn facts from the backend: latency, tokens, which parser reading was
+    needed. Kept beside the outcome rather than in it, because none of it changes
+    whether the action was performed -- but all of it changes how the result
+    should be read. A model that is 5% better and 40x slower is a different
+    product, not a better one, and a bare accuracy column cannot say so."""
+
     @property
     def is_fault(self):
         return self.outcome in ALL_FAULTS

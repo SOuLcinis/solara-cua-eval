@@ -49,6 +49,14 @@ class Backend:
     def reset(self, task):
         """Start a fresh episode. Called once per run, before any action."""
 
+    def turn_metadata(self):
+        """Facts about the turn just produced: latency, tokens, parse form.
+
+        Read after every next_action and stored on the record. Optional, because
+        a backend that has none (the oracle) should not have to pretend.
+        """
+        return {}
+
     def next_action(self, observation):
         """Return (action_name, args), or None to stop.
 
@@ -113,6 +121,8 @@ def run_task(task, backend, page, base_url, max_turns=MAX_TURNS, artifacts_dir=N
         }
 
         action = backend.next_action(observation)
+        meta = backend.turn_metadata()
+
         if action is None:
             run.stopped_by = "model_done"
             break
@@ -122,16 +132,18 @@ def run_task(task, backend, page, base_url, max_turns=MAX_TURNS, artifacts_dir=N
         if isinstance(action, NonAction):
             # Costs a turn and is recorded, but nothing touches the page. The
             # model still sees why on the next turn.
-            record = run.add(ActionRecord(
+            run.add(ActionRecord(
                 action=action.label,
                 outcome=action.outcome,
                 detail=action.detail,
+                meta=meta,
             ))
             last_error = action.detail
             continue
 
         fname, args = action
         record = execute_recorded(fname, args, page, width, height)
+        record.meta = meta
         run.add(record)
         # The model is entitled to see its own errors and try again -- denying it
         # that feedback is precisely the silent-failure bug this repo documents.

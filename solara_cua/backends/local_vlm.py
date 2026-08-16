@@ -31,6 +31,7 @@ turns into per-model tuning.
 """
 import base64
 import json
+import time
 import urllib.error
 import urllib.request
 
@@ -96,13 +97,24 @@ class LocalVLMBackend(Backend):
         self.timeout = timeout
         self.name = name or f"local-vlm{'' if constrained else '-free'}"
         self._goal = None
-        self.last_form = None
-        """Which parser reading the previous reply needed. Reported, not hidden."""
+        self._meta = {}
+
+    def turn_metadata(self):
+        """Latency, tokens, and which parser reading the last reply needed.
+
+        `parse_form` is the point of the constrained/unconstrained pair: if the
+        unconstrained variant scores lower purely because its replies need the
+        fallback reading, that is a formatting difference being reported as a
+        capability difference -- which is the thesis of this repo, measured on
+        itself.
+        """
+        return dict(self._meta)
 
     def reset(self, task):
         self._goal = task.goal
 
     def next_action(self, observation):
+        self._meta = {"constrained": self.constrained}
         try:
             reply, finish_reason = self._complete(observation)
         except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
@@ -122,7 +134,7 @@ class LocalVLMBackend(Backend):
             )
 
         parsed = parse_action(reply)
-        self.last_form = parsed.form or None
+        self._meta["parse_form"] = parsed.form or "unreadable"
 
         if parsed.done:
             return None
@@ -164,14 +176,29 @@ class LocalVLMBackend(Backend):
             data=json.dumps(payload).encode(),
             headers={"Content-Type": "application/json"},
         )
+        started = time.monotonic()
         with urllib.request.urlopen(request, timeout=self.timeout) as response:
             body = json.load(response)
+        elapsed = time.monotonic() - started
 
         choice = body["choices"][0]
+        usage = body.get("usage") or {}
+        message = choice["message"]
+
+        # Reasoning tokens are counted separately from the answer because they
+        # dominate here: the answer is a dozen tokens and the reasoning is
+        # hundreds. A latency figure that does not say so is not interpretable.
+        self._meta.update({
+            "latency_s": round(elapsed, 2),
+            "completion_tokens": usage.get("completion_tokens"),
+            "prompt_tokens": usage.get("prompt_tokens"),
+            "reasoning_chars": len(message.get("reasoning_content") or ""),
+            "finish_reason": choice.get("finish_reason", ""),
+        })
+
         # `content` may be absent or null when the whole budget went to
         # reasoning_content; normalise to "" so the caller sees one shape.
-        return (choice["message"].get("content") or "",
-                choice.get("finish_reason", ""))
+        return (message.get("content") or "", choice.get("finish_reason", ""))
 
 
 def server_reachable(url=DEFAULT_URL, timeout=5):
