@@ -1,5 +1,4 @@
-# Secrets — never commit. The hive keeps API keys in ~/.env.solara and
-# ~/solara_live/.env; nothing in this repo should ever read or copy them.
+# Secrets — never commit.
 .env
 .env.*
 *.key
@@ -19,8 +18,7 @@ results/*.jsonl
 results/*.json
 !results/.gitkeep
 
-# Browser profiles carry live logged-in sessions. The eval suite must never
-# use the production profile — it launches fresh ephemeral ones instead.
+# Browser profiles carry live sessions and must never be committed.
 .browser_profile/
 .eval_profile*/
 

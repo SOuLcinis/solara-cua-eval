@@ -1,8 +1,8 @@
 # Five silent failures in a working computer-use agent
 
-Found by auditing `solara_agent.py`, a functioning voice-driven browser agent
-that had been in use. Every bug was confirmed by *executing the original code*,
-not by reading it — see `scripts/verify_legacy_bugs.py`.
+Found by auditing a functioning voice-driven browser agent that had been in
+daily use. Every bug was confirmed by *executing the original code*, not by
+reading it — see `scripts/verify_legacy_bugs.py`.
 
 ```
 CONFIRMED BUG  triple_click performs no action at all
@@ -110,10 +110,10 @@ degraded to a silent no-op.
 
 ## A sixth, structural
 
-`solara_env.py` constructed its API client at import time, so the module could
-not be imported without a live API key. That is why the agent had **no tests** —
-not neglect, an import-time dependency that made testing impossible. Making the
-client lazy is what unblocked all 50 tests in this repo.
+The agent's environment module constructed its API client at import time, so
+the module could not be imported without a live API key. That is why the agent
+had **no tests** — not neglect, an import-time dependency that made testing
+impossible. Making the client lazy is what unblocked the first tests.
 
 Worth stating plainly: the absence of tests was a *symptom*. The cause was a
 design decision three lines long.
@@ -328,6 +328,96 @@ The check was correct. The reporting of the check was correct. The **consumer**
 of the report threw it away, which is the same failure the whole repo is about,
 committed one layer further out. Coverage now includes the baseline line and
 the exit code of every run.
+
+---
+
+# First cross-model results
+
+Three backends, same prompt, same parser, same run loop.
+
+## 14. A truncated reply that was not empty
+
+Gemini 3.6 Flash, turn 1 of the drag task:
+
+```
+{"action": "drag_and_drop", "start_x": 194, "start_y": 400, "end_x":
+```
+
+`finish_reason: "length"`, 36 completion tokens out of a 1024-token budget.
+The model's reasoning consumed most of the budget and the answer was cut
+mid-field. The harness classified it as `MODEL_UNPARSEABLE` because the reply
+was non-empty — the `HARNESS_TOKEN_BUDGET` check only fires when `content: ""`
+and `finish_reason: "length"`.
+
+That check was written for the local model's degenerate case (reasoning
+consumes everything, answer is literally empty). This is the non-degenerate
+version: the model started answering, the budget ran out mid-sentence, and
+the result is a truncated JSON object that the parser cannot read.
+
+Both classifications are defensible. The model *did* emit something
+unparseable. The harness *did* set a budget that couldn't hold the answer.
+The current code takes the conservative position — blame the model — which
+is the safe direction for a false call, because it understates model
+capability rather than overstating it.
+
+The model recovered on turn 2 and passed the task. No score was affected.
+
+## 15. Formatting discipline does not predict capability
+
+First full-suite run, one invocation each:
+
+| | gemini-3.6-flash | mistral-small | local-vlm |
+|---|---|---|---|
+| success rate | **100%** (12/12) | 66.7% (8/12) | 91.7% (11/12) |
+| malformed replies | 2 of 91 | **0 of 132** | 0 of 204 |
+| self-terminated | 7/12 | 3/12 | 2/12 |
+| mean turn latency | 3.0s | 1.1s | 12.9s |
+
+Mistral Small produced perfect strict JSON on every turn — zero fallback
+parsing needed — and failed four tasks. Gemini needed the fenced-JSON
+fallback once and had one truncated reply, and solved everything.
+
+A strict JSON parser would have penalised the model that scored highest
+and rewarded the one that scored lowest. "How well does it format?" and
+"how well does it act?" are not the same question, and measuring the
+first as a proxy for the second gets the direction wrong here.
+
+## 16. Self-termination varies more than task-solving
+
+The three models solved 11, 8, and 12 of 12 scored tasks respectively.
+They recognised completion in 2, 3, and 7 of those. Knowing *when to
+stop* varies 3.5x across models while knowing *what to do* varies 1.5x.
+
+Gemini's pattern is informative: it self-terminated on every
+single-action task (click, double-click, type, right-click, select,
+hotkey) and none of the multi-step tasks except one. It solves a
+multi-step task, sees the result, and keeps acting — which is also
+what the local model does, but Gemini does it on fewer tasks.
+
+End-state scoring would not have caught this. Under end-state scoring,
+a model that solves a task and then acts for ten more turns is at risk
+of undoing its own work — and any regression would be charged to its
+task-solving ability rather than its stopping ability.
+
+## 17. Four genuine model failures, all readable in the trace
+
+Mistral Small's four failures on the first full run:
+
+- **scroll-to-reach-control**: scrolled **up** 12 times. The target is
+  below the fold. Never reversed direction.
+- **hotkey-select-all-delete**: sent `Control+a` without focusing the
+  textarea. Same failure as the local 4B across all invocations — this
+  may be a common weakness in smaller vision models.
+- **navigate-and-return**: clicked twice, declared itself done. Did not
+  use `go_back` or verify the return condition.
+- **publish-without-hitting-origin**: clicked (850, 750) twelve times.
+  The origin trap has a decoy at (0,0); the model found *a* button but
+  not the right one, and perseverated.
+
+All four failures are `outcome: ok` on every action — the harness
+executed faithfully. Zero contamination. These are real capability gaps,
+readable directly from the trace without any interpretation by the
+harness.
 
 ---
 

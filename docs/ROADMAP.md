@@ -7,18 +7,17 @@ and continue without re-deriving anything.
 
 ## 1. Privacy architecture — decided, non-negotiable
 
-The production agent launches Chromium with `launch_persistent_context(
-user_data_dir=~/solara_live/.browser_profile)`. That profile holds live
-logged-in cookies for a real Google account. The agent loop base64-encodes a
-full screenshot into every API request.
+The production agent launches Chromium with `launch_persistent_context()`
+using a profile directory that holds live logged-in cookies. The agent loop
+base64-encodes a full screenshot into every API request.
 
-**Therefore: the eval suite never uses that profile, and never browses a site
-anyone is logged into.**
+**Therefore: the eval suite never uses the production profile, and never
+browses a site anyone is logged into.**
 
 Four rules:
 
 1. **Ephemeral context only.** Every eval run gets a fresh throwaway profile
-   directory, deleted afterward. Never `PROFILE_DIR`.
+   directory, deleted afterward. Never the production profile.
 2. **Local fixtures only** (see §2). No public internet targets, so there is no
    account, no session, and no third-party page content to leak.
 3. **Results record structure, never content.** A run record holds action names,
@@ -129,10 +128,9 @@ not a ranking. This matters especially given the local-model goal.
 
 **Explicitly out of scope, for now:**
 
-- Improving Solara's production agent beyond what the suite needs.
-- Any new hardware, any new local models.
-- Anything requiring the credentialed browser profile.
-- Hive expansion, dashboards, sandbox Phase 1.
+- Improving the production agent beyond what the suite needs.
+- Any new hardware or new local models.
+- Anything requiring a credentialed browser profile.
 - Real-website testing (revisit only after G1–G4 land).
 
 If a task doesn't serve G1–G4, it waits.
@@ -148,7 +146,7 @@ and split for each. `run_suite.py` runs them against a localhost server in an
 ephemeral browser context. Oracle replay is green end to end and deterministic
 across repeats. **Cost: zero.**
 
-**Phase 2 — backend adapters** — 🟡 **local done; paid backends deferred**
+**Phase 2 — backend adapters** — ✅ **done**
 One interface, several implementations. The adapter converts model output into
 the executor's action vocabulary; everything downstream stays identical. Models
 emit different function-call formats, and normalising them is where bias creeps
@@ -158,19 +156,28 @@ how a model is reached.
 - ✅ **Local vision model** (`--backend local`). Zero cost, no key, nothing
   leaves the machine. Also `--backend local-free` for the same model without
   constrained decoding, which isolates formatting from capability.
-- ⏸️ **Gemini / Mistral** — deferred. Not a technical blocker: the adapter
-  interface is done and a second implementation is a small file. Revisit when
-  paid API budget is available.
+- ✅ **Mistral** (`--backend mistral`). Default model `mistral-small-latest`;
+  override with `--model`. One format difference from OpenAI: Mistral's
+  `image_url` is a plain string, not a `{"url": "..."}` object.
+- ✅ **Gemini** (`--backend gemini`). Uses Google's OpenAI-compatible endpoint.
+  Default model `gemini-3.6-flash` (note: `gemini-2.5-flash` is retired for
+  new API keys). Override with `--model`.
 
-Building this backend produced five harness faults, all of which would have been
-published as model results. They are written up as findings #6–#10 in
+Building the local backend produced five harness faults, all of which would
+have been published as model results. They are written up as findings #6–#10 in
 `docs/FINDINGS.md` — the harness turning out to have the disease it was built to
 diagnose is the strongest evidence in the repo, not an embarrassment to bury.
 
-**Phase 3 — run and analyse**
-Baselines first. Then the full suite, ≥3 runs per task per backend. Produce
-per-backend summaries and the cross-model comparison. The interesting result:
-which failure modes are model-specific versus harness-wide.
+**Phase 3 — run and analyse** — ✅ **done**
+Three backends, three independent invocations each, nine total runs. Every task
+passed or failed identically across invocations. Zero contamination.
+
+Key cross-model findings (#14–#17 in FINDINGS.md):
+- Gemini 3.6 Flash 100%, local 4B 91.7%, Mistral Small 66.7%
+- Formatting discipline does not predict capability (Mistral: perfect JSON,
+  worst score)
+- Self-termination varies 2.7x across models while task-solving varies 1.5x
+- The local 4B outperforms the paid Mistral API on task completion
 
 **Correction to practice #6, from the first real runs.** "Run each task ≥3
 times" is not sufficient, and following it literally here produced a number that
@@ -196,18 +203,18 @@ repo public.
 
 ## 6. Current state
 
-- ✅ Executor, taxonomy, instrumentation, scoring, reporting — 129 tests passing
+- ✅ Executor, taxonomy, instrumentation, scoring, reporting — 197 tests passing
 - ✅ Five bugs found and confirmed by executing the original code
 - ✅ Offline demo runs with no key and no browser
 - ✅ Private repo, SSH auth working, local and remote reconciled
 - ✅ Phase 1 — fixtures, tasks, oracles, runner; suite green in a real browser
-- ⬜ Phase 2 — backend adapters, next
-- ⚠️ No live model runs. Every number so far is a demonstration of the scoring,
-  not an empirical result about any model.
+- ✅ Phase 2 — three backend adapters (local, Mistral, Gemini)
+- ✅ Phase 3 — nine invocations, cross-model comparison, findings #14–#17
+- ⬜ Phase 4 — write up and publish
 
-**Where Phase 2 plugs in.** `eval/runner.py` defines `Backend` with one method
-that matters, `next_action(observation)`, and `ScriptedBackend` implements it by
-replaying oracles. A model adapter subclasses `Backend`, sets
+**Where a new backend plugs in.** `eval/runner.py` defines `Backend` with one
+method that matters, `next_action(observation)`, and `ScriptedBackend`
+implements it by replaying oracles. A model adapter subclasses `Backend`, sets
 `needs_screenshot = True`, and translates that model's function-call format into
 the executor's action vocabulary. Nothing else in the run loop may change —
 turn limit, viewport, settle policy and criteria stay identical across backends,

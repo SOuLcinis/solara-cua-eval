@@ -6,10 +6,12 @@ moves numbers in the direction of whichever story the harness happens to tell.
 """
 import pytest
 
+from solara_cua.backends.gemini import GeminiBackend
 from solara_cua.backends.local_vlm import (
     MIN_SANE_MAX_TOKENS,
     LocalVLMBackend,
 )
+from solara_cua.backends.mistral import MistralBackend
 from solara_cua.backends.parse import parse_action
 from solara_cua.backends.prompt import ACTION_VOCABULARY, SYSTEM_PROMPT, user_prompt
 from solara_cua.eval.runner import Backend, NonAction, run_task
@@ -421,3 +423,124 @@ def test_non_action_error_is_fed_back_to_the_model():
 
     assert seen[0] is None
     assert seen[1] == "bad output"
+
+
+# ------------------------------------------------------------ mistral backend
+
+class _StubMistral(MistralBackend):
+    """MistralBackend with the network replaced."""
+
+    def __init__(self, reply, finish_reason="stop", **kw):
+        kw.setdefault("api_key", "test-key")
+        super().__init__(**kw)
+        self._reply = reply
+        self._finish = finish_reason
+
+    def _complete(self, observation):
+        return self._reply, self._finish
+
+
+def test_mistral_requires_an_api_key():
+    with pytest.raises(ValueError, match="MISTRAL_API_KEY"):
+        MistralBackend(api_key=None)
+
+
+def test_mistral_good_reply():
+    backend = _StubMistral('{"action":"click","x":500,"y":500}')
+    assert backend.next_action(_obs()) == ("click", {"x": 500, "y": 500})
+
+
+def test_mistral_truncated_reply_is_a_budget_fault():
+    backend = _StubMistral("", finish_reason="length")
+    result = backend.next_action(_obs())
+    assert isinstance(result, NonAction)
+    assert result.outcome is ActionOutcome.HARNESS_TOKEN_BUDGET
+
+
+def test_mistral_unparseable_reply_is_a_model_failure():
+    backend = _StubMistral("Let me think about clicking...")
+    result = backend.next_action(_obs())
+    assert isinstance(result, NonAction)
+    assert result.outcome is ActionOutcome.MODEL_UNPARSEABLE
+
+
+def test_mistral_done_stops_the_run():
+    assert _StubMistral('{"action":"done"}').next_action(_obs()) is None
+
+
+def test_mistral_metadata_includes_parse_form():
+    backend = _StubMistral('{"action":"click","x":1,"y":2}')
+    backend.next_action(_obs())
+    assert backend.turn_metadata()["parse_form"] == "json"
+
+
+def test_mistral_unreadable_reply_is_kept():
+    backend = _StubMistral("I shall ponder this deeply.")
+    backend.next_action(_obs())
+    assert "ponder" in backend.turn_metadata()["raw_reply"]
+
+
+def test_mistral_name_derives_from_model():
+    assert _StubMistral("x", model="mistral-small-latest").name == "mistral-small"
+    assert _StubMistral("x", model="mistral-large-latest").name == "mistral-large"
+    assert _StubMistral("x", model="mistral-medium-2508").name == "mistral-medium-2508"
+
+
+# ------------------------------------------------------------- gemini backend
+
+class _StubGemini(GeminiBackend):
+    """GeminiBackend with the network replaced."""
+
+    def __init__(self, reply, finish_reason="stop", **kw):
+        kw.setdefault("api_key", "test-key")
+        super().__init__(**kw)
+        self._reply = reply
+        self._finish = finish_reason
+
+    def _complete(self, observation):
+        return self._reply, self._finish
+
+
+def test_gemini_requires_an_api_key():
+    with pytest.raises(ValueError, match="GEMINI_API_KEY"):
+        GeminiBackend(api_key=None)
+
+
+def test_gemini_good_reply():
+    backend = _StubGemini('{"action":"click","x":500,"y":500}')
+    assert backend.next_action(_obs()) == ("click", {"x": 500, "y": 500})
+
+
+def test_gemini_truncated_reply_is_a_budget_fault():
+    backend = _StubGemini("", finish_reason="length")
+    result = backend.next_action(_obs())
+    assert isinstance(result, NonAction)
+    assert result.outcome is ActionOutcome.HARNESS_TOKEN_BUDGET
+
+
+def test_gemini_unparseable_reply_is_a_model_failure():
+    backend = _StubGemini("I'm not sure what to do here.")
+    result = backend.next_action(_obs())
+    assert isinstance(result, NonAction)
+    assert result.outcome is ActionOutcome.MODEL_UNPARSEABLE
+
+
+def test_gemini_done_stops_the_run():
+    assert _StubGemini('{"action":"done"}').next_action(_obs()) is None
+
+
+def test_gemini_metadata_includes_parse_form():
+    backend = _StubGemini('{"action":"click","x":1,"y":2}')
+    backend.next_action(_obs())
+    assert backend.turn_metadata()["parse_form"] == "json"
+
+
+def test_gemini_unreadable_reply_is_kept():
+    backend = _StubGemini("Perhaps I should click something.")
+    backend.next_action(_obs())
+    assert "Perhaps" in backend.turn_metadata()["raw_reply"]
+
+
+def test_gemini_name_derives_from_model():
+    assert _StubGemini("x", model="gemini-3.6-flash").name == "gemini-3.6-flash"
+    assert _StubGemini("x", model="gemini-2.5-pro").name == "gemini-2.5-pro"

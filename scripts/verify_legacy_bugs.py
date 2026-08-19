@@ -3,8 +3,9 @@
 This is the evidence behind docs/FINDINGS.md: the bugs are confirmed by running
 the original code, not by reading it.
 
-Copied verbatim from solara_agent.py before the fix. If these assertions hold,
-the old code really did the wrong thing and the new tests are genuine regressions.
+Copied verbatim from the production agent before the fix. If these assertions
+hold, the old code really did the wrong thing and the new tests are genuine
+regressions.
 """
 import sys
 from pathlib import Path

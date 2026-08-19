@@ -1,9 +1,9 @@
 """Regression tests for the computer-use action executor.
 
-Every test here corresponds to a real defect found by auditing the original solara_agent.py.
-The common shape of those defects: an action that did nothing, or did the wrong
-thing, while reporting success to the model. The model then sees an unchanged
-screenshot with no error to explain it, and burns turns retrying.
+Every test here corresponds to a real defect found by auditing a production
+browser agent. The common shape: an action that did nothing, or did the wrong
+thing, while reporting success. The model then sees an unchanged screenshot
+with no error to explain it, and burns turns retrying.
 """
 import pytest
 

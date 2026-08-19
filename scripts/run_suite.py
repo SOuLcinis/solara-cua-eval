@@ -50,7 +50,7 @@ def check_baselines(runs):
     return problems
 
 
-def build_backend(choice):
+def build_backend(choice, model=None):
     """Resolve a backend name. Fails loudly rather than falling back to a stub.
 
     A backend that silently degrades to something cheaper would produce a full
@@ -60,14 +60,32 @@ def build_backend(choice):
     if choice == "oracle":
         return ScriptedBackend()
 
-    from solara_cua.backends.local_vlm import LocalVLMBackend, server_reachable
+    if choice in ("local", "local-free"):
+        from solara_cua.backends.local_vlm import LocalVLMBackend, server_reachable
 
-    if not server_reachable():
-        sys.exit(
-            "No local vision server on http://127.0.0.1:8080.\n"
-            "Start llama-server with a multimodal model and an mmproj, then retry."
-        )
-    return LocalVLMBackend(constrained=(choice == "local"))
+        if not server_reachable():
+            sys.exit(
+                "No local vision server on http://127.0.0.1:8080.\n"
+                "Start llama-server with a multimodal model and an mmproj, then retry."
+            )
+        kw = {"constrained": choice == "local"}
+        if model:
+            kw["model"] = model
+        return LocalVLMBackend(**kw)
+
+    if choice == "mistral":
+        from solara_cua.backends.mistral import MistralBackend
+        kw = {}
+        if model:
+            kw["model"] = model
+        return MistralBackend(**kw)
+
+    if choice == "gemini":
+        from solara_cua.backends.gemini import GeminiBackend
+        kw = {}
+        if model:
+            kw["model"] = model
+        return GeminiBackend(**kw)
 
 
 def main():
@@ -81,10 +99,14 @@ def main():
     ap.add_argument("--max-turns", type=int, default=MAX_TURNS)
     ap.add_argument("--headed", action="store_true", help="show the browser")
     ap.add_argument("--backend", default="oracle",
-                    choices=("oracle", "local", "local-free"),
+                    choices=("oracle", "local", "local-free",
+                             "mistral", "gemini"),
                     help="oracle replays known-correct traces (free); "
                          "local drives the on-device vision model; "
-                         "local-free is the same model without constrained decoding")
+                         "local-free is the same model without constrained decoding; "
+                         "mistral and gemini call their respective cloud APIs")
+    ap.add_argument("--model", default=None,
+                    help="override the default model ID for the chosen backend")
     ap.add_argument("--out", default=None,
                     help="results file (default: results/<backend>.jsonl)")
     ap.add_argument("--artifacts", action="store_true",
@@ -108,7 +130,7 @@ def main():
     if gaps:
         print(f"note: primitives with no task: {', '.join(gaps)}\n")
 
-    backend = build_backend(args.backend)
+    backend = build_backend(args.backend, model=args.model)
     artifacts_dir = (REPO / "artifacts") if args.artifacts else None
 
     runs = []
